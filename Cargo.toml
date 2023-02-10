@@ -1,0 +1,11 @@
+[package]
+name = "flexalgebra"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "flexalgebra"
+crate-type = ["rlib"]
+
+[dependencies]
+num-traits = "^0.2"
