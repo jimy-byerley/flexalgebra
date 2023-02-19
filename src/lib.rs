@@ -10,3 +10,5 @@ pub mod matrix;
 pub mod vector;
 pub mod matrices;
 pub mod vectors;
+
+pub mod idea;

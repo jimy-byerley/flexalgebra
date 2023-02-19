@@ -1,35 +1,27 @@
-pub trait Matrix<T, R, C>: 
-	Add<Matrix<T,R,C>, Output=Matrix<T,R,C>> 
-	+ Mul<Matrix<T,R2,C2>, Output=Matrix<T,R2,C>>
-	+ Add<T, Output=Matrix<T,R,C>>
-	+ Mul<T, Output=Matrix<T,R,C>>
-	+ Index<[usize; 2], Item=T>
-	+ IndexMut<[usize; 2]>
-	
-pub trait AllocateProduct<T, R, C> {
-	type Output = Matrix<T, R2, C>;
-	fn allocate_product(&self, Matrix<T, R2, C2>) -> Self::Output;
-}
+use std::ops::*;
+use std::iter::Sum;
 
-pub trait AllocateSame<T, R, C> {
-	type Output = Matrix<T, R, C>;
-	fn allocate_same(&self) -> Self::Output;
-}
 
 pub trait Matrix<T, R, C>: 
-	+ Index<[usize; 2], Item=T>
+	Clone
+	+ Index<[usize; 2], Output=T>
 	+ IndexMut<[usize; 2]>
-	+ PreProduct<T, R, C>
-	+ ComponentWise<T, R, C>
+// 	+ Add<impl Matrix<T,R,C>, Output=Self::Owned<R,C>>
+	+ Add<T, Output=Self::Owned<R,C>>
+	+ Mul<T, Output=Self::Owned<R,C>>
+	where T: Clone
 {
-	type Owned = Matrix<T, R, C>;
-	type Product = Matrix<T, R2, C>;
+	type Owned<R2, C2>: Matrix<T,R2,C2> + Default;
 	
 	fn shape(&self) -> [usize; 2];
-	fn allocate_owned(&self) -> Self::Owned;
-	fn allocate_product(&self, Matrix<T, R2, C2>) -> Self::Product;
+	fn uninit<R2, C2>(shape: [usize; 2]) -> Self::Owned<R2, C2>;
 	
-	fn field<F>(self, field: F) -> Self {
+	fn rows(&self) -> usize  {self.shape()[0]}
+	fn columns(&self) -> usize  {self.shape()[1]}
+	
+	fn field<F>(mut self, field: F) -> Self 
+		where F: Fn([usize; 2]) -> T
+	{
 		for i in 0 .. self.rows() {
 			for j in 0 .. self.columns() {
 				let index = [i,j];
@@ -39,42 +31,129 @@ pub trait Matrix<T, R, C>:
 		self
 	}
 	
-	fn zeros(self) -> Self {
-		self.field(|_| T::Zero)
-	}
-	
-	fn one(self) -> Self {
-		self.field(|_| T::One}
-	}
-	
 	fn full(self, value: T) -> Self {
-		self.field(|_| value}
+		self.field(|_| value.clone())
 	}
 
-	fn identity(self) -> Self {
-		self.field(|[i,j]|  if i==j {T::One} else {T::Zero})
+// 	fn zeros(self) -> Self {
+// 		self.field(|_| T::Zero)
+// 	}
+// 	
+// 	fn one(self) -> Self {
+// 		self.field(|_| T::One)
+// 	}
+// 	
+// 	fn identity(self) -> Self {
+// 		self.field(|[i,j]|  if i==j {T::One} else {T::Zero})
+// 	}
+	
+	fn matadd<'s, M>(&'s self, other: &'s M) -> Self::Owned<R,C>
+		where 
+			M: Matrix<T,R,C>,
+			T: Add<Output=T>,
+	{
+		assert_eq!(self.shape(), other.shape());
+		
+		Self::uninit(self.shape())
+			.field(|i|  self[i].clone() + other[i].clone())
+	}
+	
+	fn matmul<'s,D,M>(&'s self, other: &'s M) -> Self::Owned<R,D>   
+		where 
+			M: Matrix<T,C,D>,
+			T: Add<Output=T> + Mul<Output=T> + Sum<T>,
+	{
+		assert_eq!(self.shape()[1], other.shape()[0]);
+		
+		Self::uninit([self.shape()[0], other.shape()[1]])
+			.field(|i|  
+				(0 .. self.shape()[1])
+				.map(|d|  self[[i[0], d]].clone() * other[[d, i[1]]].clone())
+				.sum()
+				)
+	}
+}
+/*
+impl<T,R,C, A,B> Add<B> for A
+	where 
+		T: Add,
+		A: Matrix<T,R,C>,
+		B: Matrix<T,R,C>,
+{
+	type Output = A::Owned<R,C>;
+	fn add(&self, other: &B) -> Self::Output {
+		assert_eq!(self.shape, other.shape);
+		
+		Self::Output::default().field(|i|  self[i] + other[i])
 	}
 }
 
+impl<T,R,D,C, A, B> Mul<B> for A
+	where
+		A: Matrix<T,R,D>,
+		B: Matrix<T,D,C>,
+{
+	type Output = A::Owned<R,C>;
+	fn mul(&self, other: &B) -> Self::Output   {
+		assert_eq!(self.shape[1], other.shape[0]);
+		
+		Self::Output::default().field(|i|  
+			(0 .. self.shape[1])
+			.map(|d|  self[[i[0],d]] * other[[d, i[1]]])
+			.sum()
+			)
+	}
+}
+*/
+
+/*
+trait MatAdd<T,R,C, Rhs: Matrix<T,R,C>>: Matrix<T,R,C> 
+	where T: Add<Output=T>
+{
+	fn matadd(&self, other: &Rhs) -> Self::Owned<R,C> {
+		assert_eq!(self.shape(), other.shape());
+		
+		Self::Owned::default().field(|i|  self[i] + other[i])
+	}
+}
+
+trait MatMul<T,R,D,C, Rhs: Matrix<T,D,C>>: Matrix<T,R,D> 
+	where T: Add<Output=T> + Mul<Output=T> + Sum<T>
+{
+	fn matmul(&self, other: &Rhs) -> Self::Owned<R,C>   {
+		assert_eq!(self.shape()[1], other.shape()[0]);
+		
+		Self::Owned::default().field(|i|  
+			(0 .. self.shape()[1])
+			.map(|d|  self[[i[0],d]] * other[[d, i[1]]])
+			.sum()
+			)
+	}
+}
+
+use_matrix_operators!(SMatrix);
+*/
+
 pub trait Vector<T, D>:
-	Add<Vector<T,D>, Output=Vector<T,D>>
-	+ Add<T, Output=Vector<T,D>>
-	+ Mul<T, Output=Vector<T,D>>
-	+ Index<usize, Item=T>
+	Clone + ToOwned
+// 	+ Add<Vector<T,D>, Output=Vector<T,D>>
+// 	+ Add<T, Output=Vector<T,D>>
+// 	+ Mul<T, Output=Vector<T,D>>
+	+ Index<usize, Output=T>
 	+ IndexMut<usize>
 {}
 
-impl Matrix<T, na::Const<1>, na::Const<1>>  for f64 {}
-impl Matrix<T, na::Const<1>, na::Const<1>>  for f32 {}
-impl<N> Matrix<T, N, na::Const<1>>  for Vector<T,N,1> {}
+// impl Matrix<T, na::Const<1>, na::Const<1>>  for f64 {}
+// impl Matrix<T, na::Const<1>, na::Const<1>>  for f32 {}
+// impl<N> Matrix<T, N, na::Const<1>>  for Vector<T,N,1> {}
 
 
 
 
-fn main() {
-
-	let mat = SMatrix<f32, 4, 4>::new().identity();
-	let grid = SMatrix<f32, 4,3>::new().full(4.);
-	let view = mat.view();
-	let dmat = DMatrix<f32>::new(12,10).identity();
-}
+// fn main() {
+// 
+// 	let mat = SMatrix::<f32, 4, 4>::new().identity();
+// 	let grid = SMatrix::<f32, 4, 3>::new().full(4.);
+// 	let view = mat.view();
+// 	let dmat = DMatrix::<f32>::new(12,10).identity();
+// }
