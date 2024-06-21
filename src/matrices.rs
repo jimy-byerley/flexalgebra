@@ -1,68 +1,53 @@
+use super::prelude::*;
+use super::matrix::*;
 
-use crate::prelude::*;
-use crate::matrix::*;
-use crate::vectors::*;
-use std::ops::*;
-
-
-// statically allocated matrix
-
-pub struct Static2<T, const R: usize, const C: usize> {
-	pub data: [[T; R]; C],
+pub struct SMatrix<T: Element, const R: usize, const C: usize> {
+	data: [[T; C]; R],
+}
+impl<T: Element, const R: usize, const C: usize> 
+	Matrix<T,Stat<R>,Stat<C>> for SMatrix<T,R,C>
+{
+	fn shape(&self) -> [usize; 2]   {[R, C]}
+	fn strides(&self) -> [usize; 2] {[C, 1]}
+	fn as_ptr(&self) -> *const T        {self.data.as_ptr() as _}
+	fn as_mut_ptr(&mut self) -> *mut T  {self.data.as_mut_ptr() as _}
 }
 
-impl<T: Default + Sized + Copy, const R: usize, const C: usize> 
-Array2 for Static2<T, R, C> {
-	type Scalar = T;
-	type Owned = Self;
-	
-	fn shape(&self) -> [usize; 2]  {[R, C]}
+pub struct DMatrix<T: Element, R: Dim=Dyn, C: Dim=Dyn> {
+	shape: (R, C),
+	strides: (R, C),
+	data: Vec<T>,
 }
-impl<T: Default + Sized + Copy, const R: usize, const C: usize> 
-Owned for Static2<T, R, C> {
-	fn empty() -> Self  {Static2{data: [[T::default();R];C]}}
-}
-impl<T, const R: usize, const C: usize> 
-Index<[usize; 2]> for Static2<T, R, C> {
-	type Output = T;
-	fn index(&self, i: [usize; 2]) -> &T  {&self.data[i[0]][i[1]]}
-}
-impl<T, const R: usize, const C: usize> 
-IndexMut<[usize; 2]> for Static2<T, R, C> {
-	fn index_mut(&mut self, i: [usize; 2]) -> &mut T  {&mut self.data[i[0]][i[1]]}
+impl<T: Element, R: Dim, C: Dim> 
+	Matrix<T,R,C> for DMatrix<T,R,C> 
+{
+	fn shape(&self) -> [usize; 2]    {[self.shape.0.value(), self.shape.1.value()]}
+	fn strides(&self) -> [usize; 2]  {[self.strides.0.value(), self.strides.1.value()]}
+	fn as_ptr(&self) -> *const T        {self.data.as_ptr()}
+	fn as_mut_ptr(&mut self) -> *mut T  {self.data.as_mut_ptr()}
 }
 
-
-pub type Mat2<T> = Matrix<Static2<T, 2, 2>>;
-pub type Mat3<T> = Matrix<Static2<T, 3, 3>>;
-pub type Mat4<T> = Matrix<Static2<T, 4, 4>>;
-
-// storage-specific methods
-
-impl<T: Default + Sized + Copy, const R: usize, const C: usize> 
-Matrix<Static2<T, R, C>> {
-	
-// 	fn column<'a>(&'a self, i: usize) -> &'a Vector<&Static1<T, R>> {}
-// 	fn row<'a>(&'a self, i: usize) -> &'a Vector<&View1<T, C>> {}
+pub struct VMatrix<T: Element, R: Dim=Dyn, C: Dim=Dyn> {
+	shape: (R, C),
+	strides: (R, C),
+	data: *mut T,
 }
-
-
-#[test]
-fn test_static() {
-	let mat = Mat4::<f32>::identity();
-	println!("mat: {}", mat);
+impl<T: Element, R: Dim, C: Dim>
+	Matrix<T,R,C> for VMatrix<T,R,C>
+{
+	fn shape(&self) -> [usize; 2]    {[self.shape.0.value(), self.shape.1.value()]}
+	fn strides(&self) -> [usize; 2]  {[self.strides.0.value(), self.strides.1.value()]}
+	fn as_ptr(&self) -> *const T        {self.data as _}
+	fn as_mut_ptr(&mut self) -> *mut T  {self.data}
 }
-
-
-
-
-pub struct SViewMatrix<'a, T, const R: usize, const C: usize> {
-	pub data: &'a [T],
-	pub stride: [usize; 2],
-}
-
-pub struct DViewMatrix<'a, T: Default> {
-	pub data: &'a [T],
-	pub shape: [usize; 2],
-	pub strides: [usize; 2],
+impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
+	fn view(&self) -> VMatrix<T,R,C> {
+		let shape = self.shape();
+		let strides = self.strides();
+		VMatrix {
+			shape: (R::check(shape[0]).unwrap(), C::check(shape[1]).unwrap()),
+			strides: (R::check(strides[0]).unwrap(), C::check(strides[1]).unwrap()),
+			data: self.as_mut_ptr(),
+		}
+	}
 }

@@ -1,146 +1,138 @@
-use std::ops::*;
+use crate::prelude::*;
+
+use core::iter::zip;
+use core::ops::*;
 use std::fmt;
 use num_traits::{Zero, One};
 
-use crate::prelude::*;
 
-
-/** Array2 interface, this trait allows the use of any data structure as a matrix */
-pub trait Array2: 
-	Index<[usize; 2], Output=<Self as Array2>::Scalar>
-	+IndexMut<[usize; 2], Output=<Self as Array2>::Scalar>
+pub trait Matrix<T: Element, R: Dim, C: Dim>
 {
-	type Scalar: Sized + Copy;
-	type Owned: Array2<Scalar=Self::Scalar> + Owned;
-	
 	fn shape(&self) -> [usize; 2];
+	fn strides(&self) -> [usize; 2];
+	fn as_ptr(&self) -> *const T;
+	fn as_mut_ptr(&mut self) -> *mut T;
 }
-
-
-/** wraps an object exposing the Array2 interface to perform matrix operations */
-pub struct Matrix<A: Array2> {
-	pub array: A,
-}
-
-// basic initializer
-
-impl<A: Array2>  From<A> for Matrix<A> {
-	fn from(value: A) -> Self   {Self{array: value}}
-}
-impl<T1, T2, A1, A2>  From<&Matrix<A2>> for Matrix<A1> 
-where
-	T2: Into<T1> + Clone,
-	A1: Array2<Scalar=T1> + Owned + Default,
-	A2: Array2<Scalar=T2>,
+impl<T: Element, R: Dim, C: Dim>
+	Index<[usize; 2]> for dyn Matrix<T,R,C>
 {
-	fn from(value: &Matrix<A2>) -> Self  {Self::from_field(|i|  value[i].clone().into())}
+	type Output = T;
+	fn index(&self, index: [usize; 2]) -> &T {
+		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
+		unsafe { &* self.as_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
+	}
 }
-
-// items access
-
-impl<A: Array2> Index<[usize; 2]> for Matrix<A> {
-	type Output = A::Scalar;
-	fn index(&self, i: [usize; 2]) -> &Self::Output  {&self.array[i]}
+impl<T: Element, R: Dim, C: Dim>
+	IndexMut<[usize; 2]> for dyn Matrix<T,R,C>
+{
+	fn index_mut(&mut self, index: [usize; 2]) -> &mut T {
+		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
+		unsafe { &mut* self.as_mut_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
+	}
 }
-impl<A: Array2> IndexMut<[usize; 2]> for Matrix<A> {
-	fn index_mut(&mut self, i: [usize; 2]) -> &mut Self::Output  {&mut self.array[i]}
-}
-
-// general methods
-
-impl<A: Array2> Matrix<A> {
-
-	pub fn shape(&self) -> [usize; 2]	{self.array.shape()}
-	pub fn rows(&self) -> usize			{self.shape()[0]}
-	pub fn columns(&self) -> usize		{self.shape()[1]}
+impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
+	pub fn rows(&self) -> usize  {self.shape()[0]}
+	pub fn columns(&self) -> usize  {self.shape()[1]}
 	
-}
-impl<A: Array2 + Owned> Matrix<A> {
-	/// build a matrix from a function returning a value each index
-	pub fn from_field<F>(field: F) -> Self
-	where F: Fn([usize; 2]) -> A::Scalar 
+	pub fn field<F>(&mut self, field: F) -> &mut Self 
+		where F: Fn([usize; 2]) -> T
 	{
-		let mut new = Self::from(A::empty());
-		for i in 0..new.rows() {
-			for j in 0..new.columns() {
+		for i in 0 .. self.rows() {
+			for j in 0 .. self.columns() {
 				let index = [i,j];
-				new[index] = field(index);
+				self[index] = field(index);
 			}
 		}
-		new
+		self
 	}
 	
-	/// build a matrix full of the given value
-	pub fn full(value: &A::Scalar) -> Self {
-		Self::from_field(|_| *value)
+	pub fn fill(&mut self, value: T) -> &mut Self {
+		self.field(|_| value.clone())
+	}
+	
+	pub fn area(&self) -> usize {
+		zip(self.shape(), self.strides()).map(|(l,s)|  l*s).sum()
+	}
+	pub fn is_contiguous(&self) -> bool {
+		let shape = self.shape();
+		let strides = self.strides();
+		shape[0]*strides[0] == strides[1]  ||  shape[1]*strides[1] == strides[0]
+	}
+	pub fn as_slice(&self) -> Option<&[T]> {
+		if self.is_contiguous() {Some(unsafe {self.as_slice_unsafe()})}
+		else {None}
+	}
+	pub fn as_slice_mut(&mut self) -> Option<&mut [T]> {
+		if self.is_contiguous() {Some(unsafe {self.as_slice_mut_unsafe()})}
+		else {None}
+	}
+	pub unsafe fn as_slice_unsafe(&self) -> &[T] {
+		core::slice::from_raw_parts(self.as_ptr(), self.area())
+	}
+	pub unsafe fn as_slice_mut_unsafe(&mut self) -> &mut [T] {
+		core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.area())
 	}
 }
 
-// custom initializers
-
-impl<S, A> Matrix<A> 
-where 
-	S: Zero,
-	A: Array2<Scalar=S> + Owned,
-{
-	pub fn zeros() -> Self {
-		Self::from_field(|_| A::Scalar::zero())
-	}
-// 	fn diagonal(diag: Self::Vector) -> Self {}
-}
-impl<S, A> Matrix<A> 
-where 
-	S: Zero + One,
-	A: Array2<Scalar=S> + Owned,
-{
- 	pub fn identity() -> Self {
-		Self::from_field(|[i,j]| 
-			if i==j  {A::Scalar::one()} 
-			else {A::Scalar::zero()}
-			)
- 	}
-}
-
-// matrix operators
-
-impl<S,A> fmt::Display for Matrix<A>
+// impl<T,R,C> dyn Matrix<T,R,C> 
+// where
+// 	T: Scalar + Add + Sub + Mul,
+// 	R: Dim,
+// 	C: Dim,
+// {
+// 	fn add_to<'s, M>(&'s self, other: &'s M) -> Self::Owned<R,C>
+// 	where 
+// 		M: Matrix<T,R,C>,
+// 		T: Add<Output=T>,
+// 	{
+// 		assert_eq!(self.shape(), other.shape());
+// 		
+// 		Self::uninit(self.shape())
+// 			.field(|i|  self[i].clone() + other[i].clone())
+// 	}
+// 	
+// 	fn mul_to<'s,D,M>(&'s self, other: &'s M) -> Self::Owned<R,D>   
+// 	where 
+// 		M: Matrix<T,C,D>,
+// 		T: Add<Output=T> + Mul<Output=T>,
+// 	{
+// 		assert_eq!(self.shape()[1], other.shape()[0]);
+// 		
+// 		Self::uninit([self.shape()[0], other.shape()[1]])
+// 			.field(|i|  
+// 				(0 .. self.shape()[1])
+// 				.map(|d|  self[[i[0], d]].clone() * other[[d, i[1]]].clone())
+// 				.reduce(T::add)
+// 				)
+// 	}
+// }
+impl<T,R,C> dyn Matrix<T,R,C>
 where
-	S: fmt::Display,
-	A: Array2<Scalar=S>,
+	T: Scalar + Zero,
+	R: Dim,
+	C: Dim,
 {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "[")?;
-		for i in 0 .. self.rows() {
-			write!(f, " [")?;
-			for j in 0 .. self.columns() {
-				write!(f, "{}, ", self[[i,j]])?;
-			}
-			write!(f, "] \n ")?;
-		}
-		write!(f, "] ")?;
-		Ok(())
+	pub fn zeros(&mut self) -> &mut Self {
+		self.field(|_| T::zero())
 	}
 }
-
-impl<S,A> Add<&Matrix<A>> for Matrix<A>
-where 
-	S: Add<S, Output=S> + Copy,
-	A: Array2<Scalar=S>,
+impl<T,R,C> dyn Matrix<T,R,C>
+where
+	T: Scalar + One,
+	R: Dim,
+	C: Dim,
 {
-	type Output = Matrix<A::Owned>;
-	fn add(self, other: &Self) -> Self::Output {
-		assert_eq!(self.shape(), other.shape(), "matrices dimensions mismatch in addition");
-		Self::Output::from_field(|index|  self[index] + other[index])
+	pub fn one(&mut self) -> &mut Self {
+		self.field(|_| T::one())
 	}
 }
-impl<S,A> Add<S> for Matrix<A> 
-where 
-	S: Add<S, Output=S> + Copy,
-	A: Array2<Scalar=S>,
+impl<T,R,C> dyn Matrix<T,R,C>
+where
+	T: Scalar + Zero + One,
+	R: Dim,
+	C: Dim,
 {
-	type Output = Matrix<A::Owned>;
-	fn add(self, other: S) -> Self::Output {		
-		Self::Output::from_field(|index|  self[index] + other)
+	pub fn identity(&mut self) -> &mut Self {
+		self.field(|[i,j]|  if i==j {T::one()} else {T::zero()})
 	}
 }
-

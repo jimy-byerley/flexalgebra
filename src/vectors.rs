@@ -1,4 +1,4 @@
-
+/*
 use crate::prelude::*;
 use crate::vector::*;
 use std::ops::*;
@@ -32,4 +32,4 @@ IndexMut<usize> for Static1<T, D> {
 
 pub type Vec2<T> = Vector<Static1<T, 2>>;
 pub type Vec3<T> = Vector<Static1<T, 3>>;
-pub type Vec4<T> = Vector<Static1<T, 4>>;
+pub type Vec4<T> = Vector<Static1<T, 4>>;*/

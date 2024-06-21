@@ -73,39 +73,38 @@ pub trait Matrix<T, R, C>:
 				)
 	}
 }
+
 /*
 impl<T,R,C, A,B> Add<B> for A
 	where 
-		T: Add,
+		T: Add<Output=T>,
 		A: Matrix<T,R,C>,
 		B: Matrix<T,R,C>,
 {
 	type Output = A::Owned<R,C>;
-	fn add(&self, other: &B) -> Self::Output {
-		assert_eq!(self.shape, other.shape);
-		
-		Self::Output::default().field(|i|  self[i] + other[i])
-	}
-}
-
-impl<T,R,D,C, A, B> Mul<B> for A
-	where
-		A: Matrix<T,R,D>,
-		B: Matrix<T,D,C>,
-{
-	type Output = A::Owned<R,C>;
-	fn mul(&self, other: &B) -> Self::Output   {
-		assert_eq!(self.shape[1], other.shape[0]);
-		
-		Self::Output::default().field(|i|  
-			(0 .. self.shape[1])
-			.map(|d|  self[[i[0],d]] * other[[d, i[1]]])
-			.sum()
-			)
-	}
+	fn add(&self, other: &B) -> Self::Output   {self.matadd(other)}
 }
 */
-
+/*
+impl<T,R,C, B> Add<B> for dyn Matrix<T,R,C>
+	where 
+		T: Add<Output=T>,
+		B: Matrix<T,R,C>,
+{
+	type Output = Self::Owned<R,C>;
+	fn add(&self, other: &B) -> Self::Output 	{self.matadd(other)}
+}
+*/
+/*
+impl<T,R,C, A,B> Add<dyn Matrix<T,R,C>> for A
+	where 
+		T: Add,
+		A: Matrix<T,R,C>,
+{
+	type Output = A::Owned<R,C>;
+	fn add(&self, other: &dyn Matrix<T,R,C>) -> Self::Output {self.matadd(self, other)}
+}
+*/
 /*
 trait MatAdd<T,R,C, Rhs: Matrix<T,R,C>>: Matrix<T,R,C> 
 	where T: Add<Output=T>
@@ -157,3 +156,25 @@ pub trait Vector<T, D>:
 // 	let view = mat.view();
 // 	let dmat = DMatrix::<f32>::new(12,10).identity();
 // }
+
+
+
+
+/*
+trait Dim {
+}
+
+pub trait Matrix: 
+	Clone
+	+ Index<[usize; 2], Output=Self::T>
+	+ IndexMut<[usize; 2]>
+	+ Add<Matrix, Output=Self::Owned<Self::R, Self::C>>
+// 	+ Add<Self::T, Output=Self::Owned<Self::R, Self::C>>
+// 	+ Mul<Self::T, Output=Self::Owned<Self::R, Self::C>>
+{
+	type T: Clone;
+	type R: Dim;
+	type C: Dim;
+	type Owned<R2, C2>: Matrix<T=Self::T, R=R2, C=C2> + Default;
+}
+*/
