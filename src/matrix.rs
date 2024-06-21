@@ -11,8 +11,13 @@ pub trait Matrix<T: Element, R: Dim, C: Dim>
 	fn shape(&self) -> [usize; 2];
 	fn strides(&self) -> [usize; 2];
 	fn as_ptr(&self) -> *const T;
+}
+pub trait MatrixMut<T: Element, R: Dim, C: Dim>: Matrix<T,R,C>
+{
 	fn as_mut_ptr(&mut self) -> *mut T;
 }
+
+
 impl<T: Element, R: Dim, C: Dim>
 	Index<[usize; 2]> for dyn Matrix<T,R,C>
 {
@@ -23,13 +28,15 @@ impl<T: Element, R: Dim, C: Dim>
 	}
 }
 impl<T: Element, R: Dim, C: Dim>
-	IndexMut<[usize; 2]> for dyn Matrix<T,R,C>
+	IndexMut<[usize; 2]> for dyn MatrixMut<T,R,C>
 {
 	fn index_mut(&mut self, index: [usize; 2]) -> &mut T {
 		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
 		unsafe { &mut* self.as_mut_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
 	}
 }
+
+
 impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
 	pub fn rows(&self) -> usize  {self.shape()[0]}
 	pub fn columns(&self) -> usize  {self.shape()[1]}
