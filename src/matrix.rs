@@ -6,43 +6,47 @@ use std::fmt;
 use num_traits::{Zero, One};
 
 
-pub trait Matrix<T: Element, R: Dim, C: Dim>
+pub trait Matrix
 {
+	type Element: Element;
+	type R: Dim;
+	type C: Dim;
+	
 	fn shape(&self) -> [usize; 2];
 	fn strides(&self) -> [usize; 2];
-	fn as_ptr(&self) -> *const T;
+	fn as_ptr(&self) -> *const Self::Element;
 }
-pub trait MatrixMut<T: Element, R: Dim, C: Dim>: Matrix<T,R,C>
+pub trait MatrixMut: Matrix
 {
-	fn as_mut_ptr(&mut self) -> *mut T;
+	fn as_mut_ptr(&mut self) -> *mut Self::Element;
 }
 
 
-impl<T: Element, R: Dim, C: Dim>
-	Index<[usize; 2]> for dyn Matrix<T,R,C>
+impl<M: Matrix>
+	Index<[usize; 2]> for M
 {
-	type Output = T;
-	fn index(&self, index: [usize; 2]) -> &T {
+	type Output = M::Element;
+	fn index(&self, index: [usize; 2]) -> &Self::Output {
 		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
 		unsafe { &* self.as_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
 	}
 }
-impl<T: Element, R: Dim, C: Dim>
-	IndexMut<[usize; 2]> for dyn MatrixMut<T,R,C>
+impl<M: MatrixMut>
+	IndexMut<[usize; 2]> for M
 {
-	fn index_mut(&mut self, index: [usize; 2]) -> &mut T {
+	fn index_mut(&mut self, index: [usize; 2]) -> &mut Self::Output {
 		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
 		unsafe { &mut* self.as_mut_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
 	}
 }
 
 
-impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
+impl<M: MatrixMut> M {
 	pub fn rows(&self) -> usize  {self.shape()[0]}
 	pub fn columns(&self) -> usize  {self.shape()[1]}
 	
 	pub fn field<F>(&mut self, field: F) -> &mut Self 
-		where F: Fn([usize; 2]) -> T
+		where F: Fn([usize; 2]) -> M::Element
 	{
 		for i in 0 .. self.rows() {
 			for j in 0 .. self.columns() {
@@ -53,7 +57,7 @@ impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
 		self
 	}
 	
-	pub fn fill(&mut self, value: T) -> &mut Self {
+	pub fn fill(&mut self, value: M::Element) -> &mut Self {
 		self.field(|_| value.clone())
 	}
 	
@@ -65,18 +69,18 @@ impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
 		let strides = self.strides();
 		shape[0]*strides[0] == strides[1]  ||  shape[1]*strides[1] == strides[0]
 	}
-	pub fn as_slice(&self) -> Option<&[T]> {
+	pub fn as_slice(&self) -> Option<&[M::Element]> {
 		if self.is_contiguous() {Some(unsafe {self.as_slice_unsafe()})}
 		else {None}
 	}
-	pub fn as_slice_mut(&mut self) -> Option<&mut [T]> {
+	pub fn as_slice_mut(&mut self) -> Option<&mut [M::Element]> {
 		if self.is_contiguous() {Some(unsafe {self.as_slice_mut_unsafe()})}
 		else {None}
 	}
-	pub unsafe fn as_slice_unsafe(&self) -> &[T] {
+	pub unsafe fn as_slice_unsafe(&self) -> &[M::Element] {
 		core::slice::from_raw_parts(self.as_ptr(), self.area())
 	}
-	pub unsafe fn as_slice_mut_unsafe(&mut self) -> &mut [T] {
+	pub unsafe fn as_slice_mut_unsafe(&mut self) -> &mut [M::Element] {
 		core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.area())
 	}
 }
@@ -113,33 +117,24 @@ impl<T: Scalar, R: Dim, C: Dim> dyn Matrix<T,R,C> {
 // 				)
 // 	}
 // }
-impl<T,R,C> dyn Matrix<T,R,C>
-where
-	T: Scalar + Zero,
-	R: Dim,
-	C: Dim,
+impl<M: Matrix> M
+where M::Element: Zero
 {
 	pub fn zeros(&mut self) -> &mut Self {
-		self.field(|_| T::zero())
+		self.field(|_| Zero::zero())
 	}
 }
-impl<T,R,C> dyn Matrix<T,R,C>
-where
-	T: Scalar + One,
-	R: Dim,
-	C: Dim,
+impl<M: Matrix> M
+where M::Element: One
 {
 	pub fn one(&mut self) -> &mut Self {
-		self.field(|_| T::one())
+		self.field(|_| One::one())
 	}
 }
-impl<T,R,C> dyn Matrix<T,R,C>
-where
-	T: Scalar + Zero + One,
-	R: Dim,
-	C: Dim,
+impl<M: Matrix> M
+where M::Element: Zero + One
 {
 	pub fn identity(&mut self) -> &mut Self {
-		self.field(|[i,j]|  if i==j {T::one()} else {T::zero()})
+		self.field(|[i,j]|  if i==j {One::one()} else {Zero::zero()})
 	}
 }
