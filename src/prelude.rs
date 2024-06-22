@@ -21,4 +21,7 @@ impl<const N: usize> Dim for Stat<N> {
 
 
 pub trait Element: Clone {}
-pub trait Scalar: Element + Add + Sub + Mul {}
+pub trait Scalar: Element + Add<Self, Output=Self> + Sub<Self, Output=Self> + Mul<Self, Output=Self> {}
+
+impl<T: Clone> Element for T {}
+impl<T: Element + Add<Self, Output=Self> + Sub<Self, Output=Self> + Mul<Self, Output=Self>> Scalar for T {}
