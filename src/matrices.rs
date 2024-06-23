@@ -4,10 +4,20 @@ use super::matrix::*;
 use core::marker::PhantomData;
 
 
+pub type SMatrix<T, const R:usize, const C:usize> = Matrix<Static<T,R,C>>;
+pub type DMatrix<T> = Matrix<Dynamic<T,Dyn,Dyn>>;
+pub type MatrixView<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
+pub type MatrixViewMut<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
+pub type SVector<T, const R:usize> = Matrix<Static<T,R,1>>;
+pub type DVector<T> = Matrix<Dynamic<T,Dyn,Stat<1>>>;
+pub type VectorView<'t,T,R=Dyn> = Matrix<View<'t,T,R,Stat<1>>>;
+pub type VectorViewMut<'t,T,R=Dyn> = Matrix<ViewMut<'t,T,R,Stat<1>>>;
+
+
 
 #[derive(Clone)]
 pub struct Static<T: Element, const R: usize, const C: usize> {
-	data: [[T; R]; C],
+	pub data: [[T; R]; C],
 }
 impl<T: Element, const R:usize, const C:usize> 
 	Array for Static<T,R,C>
@@ -52,8 +62,8 @@ impl<T:Scalar + Copy + Default, const R:usize, const C:usize>
 
 #[derive(Clone)]
 pub struct Dynamic<T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	shape: (R, C),
-	data: Vec<T>,
+	pub shape: (R, C),
+	pub data: Vec<T>,
 }
 impl<T: Element, R: Dim, C: Dim> 
 	Array for Dynamic<T,R,C> 
@@ -139,10 +149,10 @@ impl<T:Scalar + Default>
 
 #[derive(Copy, Clone, Debug)]
 pub struct View<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	shape: (R, C),
-	strides: (usize, usize),
-	data: *const T,
-	lifetime: PhantomData<&'t T>,
+	pub shape: (R, C),
+	pub strides: (usize, usize),
+	pub data: *const T,
+	pub lifetime: PhantomData<&'t T>,
 }
 impl<T: Element, R: Dim, C: Dim>
 	Array for View<'_, T,R,C>
@@ -176,10 +186,10 @@ impl<A:Array> Matrix<A> {
 
 #[derive(Debug)]
 pub struct ViewMut<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	shape: (R, C),
-	strides: (usize, usize),
-	data: *mut T,
-	lifetime: PhantomData<&'t mut T>,
+	pub shape: (R, C),
+	pub strides: (usize, usize),
+	pub data: *mut T,
+	pub lifetime: PhantomData<&'t mut T>,
 }
 impl<T: Element, R: Dim, C: Dim>
 	Array for ViewMut<'_, T,R,C>

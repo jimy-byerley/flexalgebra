@@ -8,7 +8,8 @@
 pub mod prelude;
 pub mod matrix;
 pub mod operators;
-pub mod vector;
 pub mod matrices;
-pub mod vectors;
+pub mod glm;
 
+pub use matrix::*;
+pub use matrices::*;
