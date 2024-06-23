@@ -12,7 +12,7 @@ use core::marker::PhantomData;
 
 
 pub type SMatrix<T, const R:usize, const C:usize> = Matrix<Static<T,R,C>>;
-pub type DMatrix<T> = Matrix<Dynamic<T,Dyn,Dyn>>;
+pub type DMatrix<T,R=Dyn,C=Dyn> = Matrix<Dynamic<T,R,C>>;
 pub type MatrixView<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
 pub type MatrixViewMut<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
 pub type SVector<T, const R:usize> = Matrix<Static<T,R,1>>;
@@ -412,6 +412,11 @@ impl<'t, T:Element>
 fn test_constructors() {
     let a = Matrix::<Dynamic<f32>>::zeros([5, 6]);
     let b = Matrix::<Static<f32, 5, 6>>::zeros();
-    dbg!(a, b);
+    let c = Matrix::<Dynamic<f32,Stat<5>>>::zeros(6);
+    dbg!(&a, &b, &c);
+    let av = c.view();
+    let bv = b.view();
+    let cv = c.view();
+    dbg!(&av, &bv, &cv);
 }
 

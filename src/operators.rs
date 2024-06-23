@@ -175,6 +175,18 @@ fn test_operators_static() {
     let c = SVector::<f32,3>::from([5.,6.,7.]);
     assert!((&(&a * &b) + &c).as_slice() == Some(&[6.,8.,10.]));
 }
+#[test]
+fn test_operators_dynamic() {
+    use super::matrices::*;
+    
+    let a = DMatrix::<f32>::identity([3,4]);
+    let b = DMatrix::<f32,Dyn,Stat<2>>::identity(4);
+    assert!((&a * &b).as_slice() == Some(&[1.,0.,0.,  0.,1.,0.]));
+    let b = DVector::<f32>::from(vec![1.,2.,3.,4.]);
+    assert!((&a * &b).as_slice() == Some(&[1.0, 2.0, 3.0]));
+    let c = DVector::<f32>::from(vec![5.,6.,7.]);
+    assert!((&(&a * &b) + &c).as_slice() == Some(&[6.,8.,10.]));
+}
 
 
 impl<A:Array>

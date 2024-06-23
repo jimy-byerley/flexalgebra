@@ -19,6 +19,11 @@ use num_traits::{Zero, One};
 	This design has been adopted to overcome the [foreign implementation limit](https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules) that would arrise if `Matrix` was a trait
 	
 	The indexing convention is always `[row, column]` whatever the underlying memory layout is
+	
+	## Note
+	
+	This page gather all methods implemented for every specializations of matrix. This includes some duplicates
+	If you seek a special [type alias](super::matrices#types), you would better got its dedicated page
 */
 #[derive(Clone)]
 pub struct Matrix<A:Array> (pub A);

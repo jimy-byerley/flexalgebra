@@ -35,7 +35,6 @@ impl<const N: usize> Dim for Stat<N> {
 /// supertrait for minimal requirements on [Array](crate::Array) and [Matrix](crate::Matrix) elements
 pub trait Element: Clone {}
 impl<T: Clone> Element for T {}
-// impl Element for f32 {}
 
 /// supertrait for [Matrix](crate::Matrix) elements allowing linear algebra operations
 pub trait Scalar: Element 
@@ -46,12 +45,20 @@ pub trait Scalar: Element
 	+ Zero
 	+ One
 	{}
-// impl<T: Element 
-// 	+ Add<Self, Output=Self> 
-// 	+ Sub<Self, Output=Self> 
-// 	+ Mul<Self, Output=Self> 
-// 	+ Div<Self, Output=Self>
-// 	+ Zero
-// 	+ One
-// 	> Scalar for T {}
+// the scalar trait has to be implemented explicitely or the compiler will mixup Array<T> with T and fall into infinite recursion at type inference
 impl Scalar for f32 {}
+impl Scalar for f64 {}
+
+impl Scalar for u8 {}
+impl Scalar for u16 {}
+impl Scalar for u32 {}
+impl Scalar for u64 {}
+impl Scalar for u128 {}
+impl Scalar for usize {}
+
+impl Scalar for i8 {}
+impl Scalar for i16 {}
+impl Scalar for i32 {}
+impl Scalar for i64 {}
+impl Scalar for i128 {}
+impl Scalar for isize {}
