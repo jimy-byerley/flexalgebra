@@ -68,9 +68,14 @@ where
 
 
 #[test]
-fn test_operators() {
+fn test_operators_static() {
     use super::matrices::*;
     
+    let a = SMatrix::<f32,3,4>::identity();
+    let b = SMatrix::<f32,4,2>::identity();
+    let r = &a * &b;
+    let b = SVector::<f32,4>::from([1.,2.,3.,4.]);
+    let r = &a * &b;
 }
 
 

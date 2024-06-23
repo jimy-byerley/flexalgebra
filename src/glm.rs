@@ -1,15 +1,19 @@
+/*!
+    Convenient type aliases and functions to mimic the [GLSL API](https://www.khronos.org/opengl/wiki/Core_Language_(GLSL))
+*/
+
 use super::matrix::*;
 use super::matrices::*;
 
-pub type Vec1<T> = Matrix<Static<T,1,1>>;
-pub type Vec2<T> = Matrix<Static<T,2,1>>;
-pub type Vec3<T> = Matrix<Static<T,3,1>>;
-pub type Vec4<T> = Matrix<Static<T,4,1>>;
+pub type Vec1<T=f32> = Matrix<Static<T,1,1>>;
+pub type Vec2<T=f32> = Matrix<Static<T,2,1>>;
+pub type Vec3<T=f32> = Matrix<Static<T,3,1>>;
+pub type Vec4<T=f32> = Matrix<Static<T,4,1>>;
 
-pub type Mat1<T> = Matrix<Static<T,1,1>>;
-pub type Mat2<T> = Matrix<Static<T,2,2>>;
-pub type Mat3<T> = Matrix<Static<T,3,3>>;
-pub type Mat4<T> = Matrix<Static<T,4,4>>;
+pub type Mat1<T=f32> = Matrix<Static<T,1,1>>;
+pub type Mat2<T=f32> = Matrix<Static<T,2,2>>;
+pub type Mat3<T=f32> = Matrix<Static<T,3,3>>;
+pub type Mat4<T=f32> = Matrix<Static<T,4,4>>;
 
 pub type FVec1 = Vec1<f32>;
 pub type FVec2 = Vec2<f32>;

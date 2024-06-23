@@ -1,3 +1,10 @@
+/*!
+	Provides the common [Array] implementations, type aliases for common matrices, as well as array-specific methods
+	
+	The structs are array implementations, each allows a different kind of matrix with a dedicated memory layout.
+	The type aliases are for convenience
+*/
+
 use super::prelude::*;
 use super::matrix::*;
 
@@ -15,6 +22,7 @@ pub type VectorViewMut<'t,T,R=Dyn> = Matrix<ViewMut<'t,T,R,Stat<1>>>;
 
 
 
+/// column-major statically sized owned array
 #[derive(Clone)]
 pub struct Static<T: Element, const R: usize, const C: usize> {
 	pub data: [[T; R]; C],
@@ -57,9 +65,24 @@ impl<T:Scalar + Copy + Default, const R:usize, const C:usize>
 	where F: FnMut([usize; 2]) -> T
 		{let mut new = Matrix::new([R,C]); new.set_field(field); new}
 }
+impl<T:Scalar + Copy, const R:usize>
+	From<[T;R]> for Matrix<Static<T,R,1>>
+{
+	fn from(src: [T;R]) -> Self {Matrix(Static{
+		data: [src],
+	})}
+}
+impl<T:Scalar + Copy, const R:usize, const C:usize>
+	From<[[T;R];C]> for Matrix<Static<T,R,C>>
+{
+	fn from(src: [[T;R];C]) -> Self {Matrix(Static{
+		data: src,
+	})}
+}
 
 
 
+/// column-major dynamically allocated owned array, sizing can be dynamic or static
 #[derive(Clone)]
 pub struct Dynamic<T: Element, R: Dim=Dyn, C: Dim=Dyn> {
 	pub shape: (R, C),
@@ -144,9 +167,28 @@ impl<T:Scalar + Default>
 	where F: FnMut([usize; 2]) -> T
 		{let mut new = Matrix::new(shape); new.set_field(field); new}
 }
+impl<T:Element, R:Dim, C:Dim> 
+	Matrix<Dynamic<T,R,C>>
+{
+	pub fn try_from_vec(shape: [usize;2], src: Vec<T>) -> Option<Self> {
+		assert!(src.len() >= shape[0]*shape[1]);
+		Some(Matrix(Dynamic{
+			data: src,
+			shape: (R::check(shape[0])?, C::check(shape[1])?),
+		}))
+	}
+}
+impl<T:Element>
+	From<Vec<T>> for Matrix<Dynamic<T, Dyn, Stat<1>>>
+{
+	fn from(src: Vec<T>) -> Self  {Matrix(Dynamic{
+		shape: (Dyn(src.len()), Stat{}),
+		data: src,
+	})}
+}
 
 
-
+/// array referncing an immutable borrowed memory buffer
 #[derive(Copy, Clone, Debug)]
 pub struct View<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
 	pub shape: (R, C),
@@ -170,6 +212,7 @@ impl<T: Element + Default, R1:Dim, C1:Dim, R2:Dim, C2:Dim>
 	type Owned = Dynamic<T,R2,C2>;
 }
 impl<A:Array> Matrix<A> {
+	/// create an immutable view on this matrix, this is useful for forwarding the matrix without moving its content
 	pub fn view(&self) -> Matrix<View<'_, A::Element, A::R, A::C>> {
 		let shape = self.shape();
 		let strides = self.strides();
@@ -180,10 +223,79 @@ impl<A:Array> Matrix<A> {
 			lifetime: PhantomData,
 		})
 	}
+	/// create a view on this matrix with a new shape and dimensionality, or `None` if it is not possible due to stride or size reasons
+	pub fn reshape<R2:Dim, C2:Dim>(&self, shape: [usize;2]) -> Option<Matrix<View<'_, A::Element, R2,C2>>> {
+		let strides = self.strides();
+		let step = strides[0].min(strides[1]);
+		if (strides[0] % step) != 0 || (strides[1] % step) != 0 
+			{return None}
+		let previous = self.shape();
+		if previous[0]*previous[1] != shape[0]*shape[1]
+			{return None}
+		Some(Matrix(View {
+			shape: (R2::check(shape[0])?, C2::check(shape[1])?),
+			strides: (step, step*shape[0]),
+			data: self.as_ptr(),
+			lifetime: PhantomData,
+		}))
+	}
+	/// create a view with columns and rows switched
+	pub fn transpose(&self) -> Matrix<View<'_, A::Element, A::C, A::R>> {
+		let dim = self.dimensionality();
+		let strides = self.strides();
+		Matrix(View {
+			shape: (dim.1, dim.0),
+			strides: (strides[1], strides[0]),
+			data: self.as_ptr(),
+			lifetime: PhantomData,
+		})
+	}
+}
+impl<'t, T:Element, R:Dim, C:Dim> 
+	Matrix<View<'t,T,R,C>>
+{
+	/**
+		immutable view in a slice buffer, with specified shape
+		
+		may fail when the shape is too big to hold in the slice's length
+	*/
+	pub fn try_from_slice(shape: [usize;2], src: &'t [T]) -> Option<Self> {
+		assert!(src.len() >= shape[0]*shape[1]);
+		Some(Matrix(View{
+			data: src.as_ptr(),
+			shape: (R::check(shape[0])?, C::check(shape[1])?),
+			strides: (1, shape[0]),
+			lifetime: PhantomData,
+		}))
+	}
+	/**
+		immutable view in a slice buffer, with specified shape and strides
+		
+		may fail when the shape*strides is too big to hold in the slice's length
+	*/
+	pub fn try_from_strides(shape: [usize;2], strides: [usize;2], src: &'t [T]) -> Option<Self> {
+		assert!(src.len() >= shape[0]*strides[0].max(shape[1]*strides[1]));
+		Some(Matrix(View{
+			data: src.as_ptr(),
+			shape: (R::check(shape[0])?, C::check(shape[1])?),
+			strides: (strides[0], strides[1]),
+			lifetime: PhantomData,
+		}))
+	}
+}
+impl<'t, T:Element>
+	From<&[T]> for Matrix<View<'t, T, Dyn, Stat<1>>>
+{
+	fn from(src: &[T]) -> Self  {Matrix(View{
+		data: src.as_ptr(),
+		shape: (Dyn(src.len()), Stat{}),
+		strides: (1, src.len()),
+		lifetime: PhantomData,
+	})}
 }
 
 
-
+/// array referncing a mutable borrowed memory buffer
 #[derive(Debug)]
 pub struct ViewMut<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
 	pub shape: (R, C),
@@ -212,6 +324,7 @@ impl<T: Element, R: Dim, C: Dim>
 	fn as_mut_ptr(&mut self) -> *mut T  {self.data}
 }
 impl<A:ArrayMut> Matrix<A> {
+	/// create an immutable view on this matrix, this is useful for forwarding the matrix without moving its content
 	pub fn view_mut(&mut self) -> Matrix<ViewMut<'_, A::Element, A::R, A::C>> {
 		let shape = self.shape();
 		let strides = self.strides();
@@ -222,7 +335,77 @@ impl<A:ArrayMut> Matrix<A> {
 			lifetime: PhantomData,
 		})
 	}
+	/// create a view on this matrix with a new shape and dimensionality, or `None` if it is not possible due to stride or size reasons
+	pub fn reshape_mut<R2:Dim, C2:Dim>(&mut self, shape: [usize;2]) -> Option<Matrix<ViewMut<'_, A::Element, R2,C2>>> {
+		let strides = self.strides();
+		let step = strides[0].min(strides[1]);
+		if (strides[0] % step) != 0 || (strides[1] % step) != 0 
+			{return None}
+		let previous = self.shape();
+		if previous[0]*previous[1] != shape[0]*shape[1]
+			{return None}
+		Some(Matrix(ViewMut {
+			shape: (R2::check(shape[0])?, C2::check(shape[1])?),
+			strides: (step, step*shape[0]),
+			data: self.as_mut_ptr(),
+			lifetime: PhantomData,
+		}))
+	}
+	/// create a view with columns and rows switched
+	pub fn transpose_mut(&mut self) -> Matrix<ViewMut<'_, A::Element, A::C, A::R>> {
+		let dim = self.dimensionality();
+		let strides = self.strides();
+		Matrix(ViewMut {
+			shape: (dim.1, dim.0),
+			strides: (strides[1], strides[0]),
+			data: self.as_mut_ptr(),
+			lifetime: PhantomData,
+		})
+	}
 }
+impl<'t, T:Element, R:Dim, C:Dim> 
+	Matrix<ViewMut<'t,T,R,C>>
+{
+	/**
+		mutable view in a slice buffer, with specified shape
+		
+		may fail when the shape is too big to hold in the slice's length
+	*/
+	pub fn try_from_slice(shape: [usize;2], src: &'t mut [T]) -> Option<Self> {
+		assert!(src.len() >= shape[0]*shape[1]);
+		Some(Matrix(ViewMut{
+			data: src.as_mut_ptr(),
+			shape: (R::check(shape[0])?, C::check(shape[1])?),
+			strides: (1, shape[0]),
+			lifetime: PhantomData,
+		}))
+	}
+	/**
+		mutable view in a slice buffer, with specified shape and strides
+		
+		may fail when the shape*strides is too big to hold in the slice's length
+	*/
+	pub fn try_from_strides(shape: [usize;2], strides: [usize;2], src: &'t mut [T]) -> Option<Self> {
+		assert!(src.len() >= shape[0]*strides[0].max(shape[1]*strides[1]));
+		Some(Matrix(ViewMut{
+			data: src.as_mut_ptr(),
+			shape: (R::check(shape[0])?, C::check(shape[1])?),
+			strides: (strides[0], strides[1]),
+			lifetime: PhantomData,
+		}))
+	}
+}
+impl<'t, T:Element>
+	From<&mut [T]> for Matrix<ViewMut<'t, T, Dyn, Stat<1>>>
+{
+	fn from(src: &mut [T]) -> Self  {Matrix(ViewMut{
+		data: src.as_mut_ptr(),
+		shape: (Dyn(src.len()), Stat{}),
+		strides: (1, src.len()),
+		lifetime: PhantomData,
+	})}
+}
+
 
 
 #[test]
