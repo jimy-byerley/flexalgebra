@@ -7,7 +7,7 @@
 
 pub mod prelude;
 pub mod matrix;
-pub mod owned;
+pub mod operators;
 pub mod vector;
 pub mod matrices;
 pub mod vectors;
