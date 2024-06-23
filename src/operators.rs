@@ -1,3 +1,7 @@
+/*!
+    implementation of most matrix operations
+*/
+
 use super::{
     prelude::*,
     matrix::*,
