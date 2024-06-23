@@ -117,10 +117,14 @@ impl<A:Array> Matrix<A> {
 		A::R::check(self.rows()).unwrap(), 
 		A::C::check(self.columns()).unwrap(),
 	)}
+	/// number of elements in the matrix
+	pub fn size(&self) -> usize {
+		self.shape().iter().product()
+	}
 	
-	/// memory area covered by this matrix (unit is the byte size of an element)
+	/// number of elements in the matrix
 	pub fn area(&self) -> usize {
-		zip(self.shape(), self.strides()).map(|(l,s)|  l*s).sum()
+		zip(self.shape(), self.strides()).map(|(l,s)|  (l-1)*s).sum::<usize>() + 1
 	}
 	/// `True` if the indexed memory is contiguous
 	pub fn is_contiguous(&self) -> bool {
@@ -191,7 +195,6 @@ where A::Element: Scalar
 impl<A, R:Dim, C:Dim> Matrix<A> 
 where 
 	A: Array<R=R,C=C> + Compatible<R,C>,
-	A::Element: Clone,
 {
 	/// copy this matrix data into a new matrix based on an [ArrayOwned]
 	pub fn owned(&self) -> Matrix<A::Owned>  {Matrix::from(self)}

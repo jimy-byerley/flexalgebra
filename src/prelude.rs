@@ -35,6 +35,7 @@ impl<const N: usize> Dim for Stat<N> {
 /// supertrait for minimal requirements on [Array](crate::Array) and [Matrix](crate::Matrix) elements
 pub trait Element: Clone {}
 impl<T: Clone> Element for T {}
+// impl Element for f32 {}
 
 /// supertrait for [Matrix](crate::Matrix) elements allowing linear algebra operations
 pub trait Scalar: Element 
@@ -45,11 +46,12 @@ pub trait Scalar: Element
 	+ Zero
 	+ One
 	{}
-impl<T: Element 
-	+ Add<Self, Output=Self> 
-	+ Sub<Self, Output=Self> 
-	+ Mul<Self, Output=Self> 
-	+ Div<Self, Output=Self>
-	+ Zero
-	+ One
-	> Scalar for T {}
+// impl<T: Element 
+// 	+ Add<Self, Output=Self> 
+// 	+ Sub<Self, Output=Self> 
+// 	+ Mul<Self, Output=Self> 
+// 	+ Div<Self, Output=Self>
+// 	+ Zero
+// 	+ One
+// 	> Scalar for T {}
+impl Scalar for f32 {}

@@ -1,5 +1,5 @@
 /*!
-    implementation of most matrix operations
+    implementation of most matrix operations and their traits
 */
 
 use super::{
@@ -11,49 +11,22 @@ use core::{
     fmt, cmp::max,
     };
 
-
-
-impl<L:Array> Matrix<L>
-where L::Element: Scalar
-{
-	pub fn add_to<'o, R, Out>(&self, right: &Matrix<R>, out: &'o mut Matrix<Out>) -> &'o mut Matrix<Out> 
-	where 
-		R: Array<Element=L::Element, R=L::R, C=L::C>,
-		Out: ArrayMut<Element=L::Element, R=L::R, C=L::C>,
-	{
-		assert_eq!(self.shape(), right.shape());
-		out.set_field(|i|  self[i].clone() + right[i].clone())
-	}
-	
-	pub fn mul_to<'o, R, Out>(&self, right: &Matrix<R>, out: &'o mut Matrix<Out>) -> &'o mut Matrix<Out>
-	where 
-		R: Array<Element=L::Element, R=L::C>,
-		Out: ArrayMut<Element=L::Element, R=L::R, C=R::C>
-	{
-		assert_eq!(self.shape()[1], right.shape()[0]);
-		out.set_field(|i|  
-				(0 .. self.shape()[1])
-				.map(|d|  self[[i[0], d]].clone() * right[[d, i[1]]].clone())
-				.reduce(Add::add).unwrap()
-				)
-	}
+    
+pub trait AddTo<T,O> {
+    fn add_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
+}
+pub trait SubTo<T,O> {
+    fn sub_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
+}
+pub trait MulTo<T,O> {
+    fn mul_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
+}
+pub trait DivTo<T,O> {
+    fn div_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
 }
 
 
-impl<L,R,RO,CO>
-	Add<&Matrix<R>> for &Matrix<L>
-where 
-	L: Array<R=RO, C=CO> + Compatible<RO,CO>,
-	R: Array<Element=L::Element, R=RO, C=CO>,
-	L::Element: Scalar,
-{
-	type Output = Matrix<L::Owned>;
-	fn add(self, right: &Matrix<R>) -> Self::Output {
-		let mut new = Matrix::new(self.shape());
-		self.add_to(right, &mut new);
-		new
-	}
-}
+
 
 impl<L,R,RO,CO> 
 	Mul<&Matrix<R>> for &Matrix<L>
@@ -63,12 +36,131 @@ where
 	L::Element: Scalar,
 {
 	type Output = Matrix<L::Owned>;
+	/// matrix product
 	fn mul(self, right: &Matrix<R>) -> Self::Output {
 		let mut new = Matrix::new([self.shape()[0], right.shape()[1]]);
 		self.mul_to(right, &mut new);
 		new
 	}
 }
+impl<L,R,O>
+    MulTo<Matrix<R>,Matrix<O>> for Matrix<L>
+where 
+    L: Array<Element=O::Element, R=O::R>,
+    R: Array<Element=O::Element, C=O::C>,
+    O: ArrayMut,
+    O::Element: Scalar,
+{
+    /// matrix product without dynamic allocation
+	fn mul_to<'o>(&self, right: &Matrix<R>, out: &'o mut Matrix<O>) -> &'o mut Matrix<O> {
+		assert_eq!(self.shape()[1], right.shape()[0]);
+		out.set_field(|i|  
+				(0 .. self.shape()[1])
+				.map(|d|  self[[i[0], d]].clone() * right[[d, i[1]]].clone())
+				.reduce(Add::add).unwrap()
+				)
+	}
+}
+
+macro_rules! elementwise_binop {
+    ($trait:ident, $method:ident, $traitto:ident, $methodto:ident, $traitassign:ident, $methodassign:ident) => {
+        impl<L,R>
+            $trait<&Matrix<R>> for &Matrix<L>
+        where 
+            L: Array<Element=R::Element, R=R::R, C=R::C> + Compatible<R::R,R::C>,
+            R: Array,
+            R::Element: Scalar,
+        {
+            type Output = Matrix<L::Owned>;
+            /// elementwise operation
+            fn $method(self, right: &Matrix<R>) -> Self::Output {
+                let mut new = Matrix::new(self.shape());
+                self.$methodto(right, &mut new);
+                new
+            }
+        }
+        impl<L,R,O>
+            $traitto<Matrix<R>,Matrix<O>> for Matrix<L>
+        where
+            L: Array<Element=O::Element, R=O::R, C=O::C>,
+            R: Array<Element=O::Element, R=O::R, C=O::C>,
+            O: ArrayMut,
+            O::Element: Scalar,
+        {
+            /// elementwise operation without dynamic allocation
+            fn $methodto<'o>(&self, right: &Matrix<R>, out: &'o mut Matrix<O>) -> &'o mut Matrix<O>
+            {
+                assert_eq!(self.shape(), right.shape());
+                out.set_field(|i|  self[i].clone().$method(right[i].clone()))
+            }
+        }
+        impl<L,R>
+            $traitassign<&Matrix<R>> for Matrix<L>
+        where
+            L: ArrayMut,
+            R: Array<Element=L::Element, R=L::R, C=L::C>,
+            L::Element: Scalar,
+        {
+            /// inplace operation without dynamic allocation
+            fn $methodassign(&mut self, right: &Matrix<R>) {
+                assert_eq!(self.shape(), right.shape());
+                let out = unsafe {core::mem::transmute::<&mut Self, &mut Self>(self)};
+                self.$methodto(right, out);
+            }
+        }
+    }
+}
+elementwise_binop!(Add, add, AddTo, add_to, AddAssign, add_assign);
+elementwise_binop!(Sub, sub, SubTo, sub_to, SubAssign, sub_assign);
+
+macro_rules! scalar_binop {
+    ($trait:ident, $method:ident, $traitto:ident, $methodto:ident, $traitassign:ident, $methodassign:ident) => {
+        impl<L,R,RO,CO>
+            $trait<R> for &Matrix<L>
+        where 
+            L: Array<Element=R, R=RO, C=CO> + Compatible<RO,CO>,
+            R: Scalar,
+        {
+            type Output = Matrix<L::Owned>;
+            /// scalar operation
+            fn $method(self, right: R) -> Self::Output {
+                let mut new = Matrix::new(self.shape());
+                self.$methodto(&right, &mut new);
+                new
+            }
+        }
+        impl<L,R,O>
+            $traitto<R,Matrix<O>> for Matrix<L>
+        where
+            L: Array<Element=R, R=O::R, C=O::C>,
+            R: Scalar,
+            O: ArrayMut<Element=R>,
+        {
+            /// scalar operation without dynamic allocation
+            fn $methodto<'o>(&self, right: &R, out: &'o mut Matrix<O>) -> &'o mut Matrix<O> {
+                out.set_field(|i|  self[i].clone().$method(right.clone()))
+            }
+        }
+        impl<L,R>
+            $traitassign<R> for Matrix<L>
+        where
+            L: ArrayMut<Element=R>,
+            R: Scalar,
+        {
+            /// inplace operation without dynamic allocation
+            fn $methodassign(&mut self, right: R) {
+                let out = unsafe {core::mem::transmute::<&mut Self, &mut Self>(self)};
+                self.$methodto(&right, out);
+            }
+        }
+    }
+}
+scalar_binop!(Add, add, AddTo, add_to, AddAssign, add_assign);
+scalar_binop!(Sub, sub, SubTo, sub_to, SubAssign, sub_assign);
+scalar_binop!(Mul, mul, MulTo, mul_to, MulAssign, mul_assign);
+scalar_binop!(Div, div, DivTo, div_to, DivAssign, div_assign);
+
+
 
 
 #[test]
@@ -77,9 +169,11 @@ fn test_operators_static() {
     
     let a = SMatrix::<f32,3,4>::identity();
     let b = SMatrix::<f32,4,2>::identity();
-    let r = &a * &b;
+    assert!((&a * &b).as_slice() == Some(&[1.,0.,0.,  0.,1.,0.]));
     let b = SVector::<f32,4>::from([1.,2.,3.,4.]);
-    let r = &a * &b;
+    assert!((&a * &b).as_slice() == Some(&[1.0, 2.0, 3.0]));
+    let c = SVector::<f32,3>::from([5.,6.,7.]);
+    assert!((&(&a * &b) + &c).as_slice() == Some(&[6.,8.,10.]));
 }
 
 

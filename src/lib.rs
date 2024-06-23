@@ -23,7 +23,7 @@
 
 pub mod prelude;
 pub mod matrix;
-mod operators;
+pub mod operators;
 pub mod matrices;
 pub mod glm;
 
