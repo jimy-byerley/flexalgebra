@@ -33,7 +33,7 @@ pub struct Matrix<A:Array> (pub A);
 	
 	The indexing convention is always `[row, column]` whatever the underlying memory layout is
 */
-pub trait Array {
+pub trait Array: Sized {
 	/// array element type
 	type Element: Element;
 	/// rows dimensionality
@@ -84,6 +84,7 @@ impl<A:Array>
 	/// `[row, column]` indexing
 	fn index(&self, index: [usize; 2]) -> &Self::Output {
 		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
+		// safety: it is the responsibility of the array trait implementor to ensure any acces to values at these strides can be read
 		unsafe { &* self.as_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
 	}
 }
@@ -92,6 +93,8 @@ impl<A:ArrayMut>
 {
 	fn index_mut(&mut self, index: [usize; 2]) -> &mut Self::Output {
 		assert!(zip(index, self.shape()).all(|(i,l)|  i<l));
+		// safety: it is the responsibility of the array trait implementor to ensure any acces to values at these strides can be written
+		// we are owning the underlying array so nobody else can have this mutable ref
 		unsafe { &mut* self.as_mut_ptr().add(zip(index, self.strides()).map(|(i,s)|  i*s).sum()) }
 	}
 }
@@ -162,6 +165,20 @@ impl<A:ArrayMut> Matrix<A> {
 		core::slice::from_raw_parts_mut(self.as_mut_ptr(), self.area())
 	}
 	
+	/// set the matrix eleemnts from the given iterator, as in column-major order
+	/// if the iterator doesn't have enough elements, the rest of the matrix will remain unchanged
+	pub fn set_iter<I>(&mut self, it: I) -> &mut Self 
+	where I: IntoIterator<Item=A::Element>
+	{
+		let mut it = it.into_iter();
+		for i in 0 .. self.rows() {
+			for j in 0 .. self.columns() {
+				if let Some(v) = it.next()  {self[[i,j]] = v}
+				else {return self}
+			}
+		}
+		self
+	}
 	/// set every element in the matrix using the given closure
 	pub fn set_field<F>(&mut self, mut field: F) -> &mut Self 
 		where F: FnMut([usize; 2]) -> A::Element
@@ -204,42 +221,49 @@ where
 	/// copy this matrix data into a new matrix based on an [ArrayOwned]
 	pub fn owned(&self) -> Matrix<A::Owned>  {Matrix::from(self)}
 }
+impl<Src: Array> 
+	From<Src> for Matrix<Src>
+{
+	fn from(src: Src) -> Matrix<Src> {Matrix(src)}
+}
 impl<Src, Dst:ArrayOwned> 
 	From<&Matrix<Src>> for Matrix<Dst>
 where
-	Src: Array<Element=Dst::Element, R=Dst::R, C=Dst::C>
+	Src: Array<R=Dst::R, C=Dst::C>,
+	Src::Element: Into<Dst::Element>,
 {
 	fn from(src: &Matrix<Src>) -> Matrix<Dst> {
 		let mut new = Matrix::new(src.shape());
-		new.set_field(|i| src[i].clone());
+		new.set_field(|i| src[i].clone().into());
 		new
 	}
 }
-// use std::error::Error;
-// pub enum ConversionError<E: Error> {
-// 	ColumnsMismatch,
-// 	RowsMismatch,
-// 	Element(E),
-// }
-// impl<Src:Array, Dst:ArrayOwned, E:Error> 
-// 	TryFrom<&Matrix<Src>> for Matrix<Dst>
-// where
-// 	Src::Element: TryInto<Dst::Element, Error=E>
-// {
-// 	type Error = ConversionError<<Src::Element as TryInto<Dst::Element>>::Error>;
-// 	fn try_from(src: &Matrix<Src>) -> Result<Matrix<Dst>, Self::Error> {
-// 		let shape = src.shape();
-// 		let mut dst = Matrix(Dst::empty((
-// 			Dst::R::check(shape[0]).ok_or(ConversionError::RowsMismatch)?,
-// 			Dst::C::check(shape[1]).ok_or(ConversionError::ColumnsMismatch)?,
-// 			)));
-// 		for i in 0 .. dst.rows() {
-// 			for j in 0 .. dst.rows() {
-// 				let index = [i,j];
-// 				dst[index] = src[index].clone().try_into().map_err(|e| ConversionError::Element(e))?;
-// 			}
-// 		}
-// 		Ok(dst)
-// 	}
-// }
+pub enum ConversionError<E> {
+	ColumnsMismatch,
+	RowsMismatch,
+	Element(E),
+}
+
+impl<A:Array> Matrix<A> {
+	/// cast this matrix into a different type and dimensionality
+	pub fn cast<Dst: ArrayOwned>(&self) -> Result<
+		Matrix<Dst>, 
+		ConversionError<<A::Element as TryInto<Dst::Element>>::Error>,
+		> 
+	where A::Element: TryInto<Dst::Element>
+	{
+		let shape = self.shape();
+		let mut dst = Matrix(Dst::empty((
+			Dst::R::check(shape[0]).ok_or(ConversionError::RowsMismatch)?,
+			Dst::C::check(shape[1]).ok_or(ConversionError::ColumnsMismatch)?,
+			)));
+		for i in 0 .. dst.rows() {
+			for j in 0 .. dst.rows() {
+				let index = [i,j];
+				dst[index] = self[index].clone().try_into().map_err(|e| ConversionError::Element(e))?;
+			}
+		}
+		Ok(dst)
+	}
+}
 

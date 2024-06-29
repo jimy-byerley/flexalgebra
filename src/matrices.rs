@@ -11,18 +11,26 @@ use super::matrix::*;
 use core::marker::PhantomData;
 
 
+/// statically sized and allocated matrix
 pub type SMatrix<T, const R:usize, const C:usize> = Matrix<Static<T,R,C>>;
+/// dynamically or staticalle sized and dynamically allocated matrix
 pub type DMatrix<T,R=Dyn,C=Dyn> = Matrix<Dynamic<T,R,C>>;
+/// immutable matrix view in a matrix
 pub type MatrixView<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
+/// mutable matrix view in a matrix
 pub type MatrixViewMut<'t,T,R=Dyn,C=Dyn> = Matrix<View<'t,T,R,C>>;
+/// statically sized and allocated column
 pub type SVector<T, const R:usize> = Matrix<Static<T,R,1>>;
+/// dynamically or statically sized and dynamically allocated column
 pub type DVector<T> = Matrix<Dynamic<T,Dyn,Stat<1>>>;
+/// immutable vector view in a matrix or vector
 pub type VectorView<'t,T,R=Dyn> = Matrix<View<'t,T,R,Stat<1>>>;
+/// mutable vector view in a matrix or vector
 pub type VectorViewMut<'t,T,R=Dyn> = Matrix<ViewMut<'t,T,R,Stat<1>>>;
 
 
 
-/// column-major statically sized owned array
+/// column-major statically sized and allocated owned array
 #[derive(Clone)]
 pub struct Static<T: Element, const R: usize, const C: usize> {
 	pub data: [[T; R]; C],
@@ -85,8 +93,8 @@ impl<T:Scalar + Copy, const R:usize, const C:usize>
 /// column-major dynamically allocated owned array, sizing can be dynamic or static
 #[derive(Clone)]
 pub struct Dynamic<T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	pub shape: (R, C),
-	pub data: Vec<T>,
+	shape: (R, C),
+	data: Vec<T>,
 }
 impl<T: Element, R: Dim, C: Dim> 
 	Array for Dynamic<T,R,C> 
@@ -191,10 +199,10 @@ impl<T:Element>
 /// array referncing an immutable borrowed memory buffer
 #[derive(Copy, Clone, Debug)]
 pub struct View<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	pub shape: (R, C),
-	pub strides: (usize, usize),
-	pub data: *const T,
-	pub lifetime: PhantomData<&'t T>,
+	shape: (R, C),
+	strides: (usize, usize),
+	data: *const T,
+	lifetime: PhantomData<&'t T>,
 }
 impl<T: Element, R: Dim, C: Dim>
 	Array for View<'_, T,R,C>
@@ -250,6 +258,19 @@ impl<A:Array> Matrix<A> {
 			lifetime: PhantomData,
 		})
 	}
+	/// extract the matrix diagonal if the matrix is square
+	pub fn diagonal(&self) -> Option<Matrix<View<'_, A::Element, A::R, Stat<1>>>> {
+		let dim = self.dimensionality();
+		if dim.0.value() != dim.1.value()
+			{return None}
+		let strides = self.strides();
+		Some(Matrix(View {
+			shape: (dim.0, Stat{}),
+			strides: (strides[0]+strides[1], 0),
+			data: self.as_ptr(),
+			lifetime: PhantomData,
+		}))
+	}
 }
 impl<'t, T:Element, R:Dim, C:Dim> 
 	Matrix<View<'t,T,R,C>>
@@ -283,8 +304,15 @@ impl<'t, T:Element, R:Dim, C:Dim>
 		}))
 	}
 }
+impl<'t, Src, T:Element, R:Dim, C:Dim>
+	From<&'t Matrix<Src>> for Matrix<View<'t,T,R,C>>
+where
+	Src: Array<Element=T, R=R, C=C>
+{
+	fn from(src: &'t Matrix<Src>) -> Self  {src.view()}
+}
 impl<'t, T:Element>
-	From<&[T]> for Matrix<View<'t, T, Dyn, Stat<1>>>
+	From<&[T]> for Matrix<View<'t,T,Dyn,Stat<1>>>
 {
 	fn from(src: &[T]) -> Self  {Matrix(View{
 		data: src.as_ptr(),
@@ -298,10 +326,10 @@ impl<'t, T:Element>
 /// array referncing a mutable borrowed memory buffer
 #[derive(Debug)]
 pub struct ViewMut<'t, T: Element, R: Dim=Dyn, C: Dim=Dyn> {
-	pub shape: (R, C),
-	pub strides: (usize, usize),
-	pub data: *mut T,
-	pub lifetime: PhantomData<&'t mut T>,
+	shape: (R, C),
+	strides: (usize, usize),
+	data: *mut T,
+	lifetime: PhantomData<&'t mut T>,
 }
 impl<T: Element, R: Dim, C: Dim>
 	Array for ViewMut<'_, T,R,C>
@@ -362,6 +390,19 @@ impl<A:ArrayMut> Matrix<A> {
 			lifetime: PhantomData,
 		})
 	}
+	/// extract the matrix diagonal if the matrix is square
+	pub fn diagonal_mut(&mut self) -> Option<Matrix<ViewMut<'_, A::Element, A::R, Stat<1>>>> {
+		let dim = self.dimensionality();
+		if dim.0.value() != dim.1.value()
+			{return None}
+		let strides = self.strides();
+		Some(Matrix(ViewMut {
+			shape: (dim.0, Stat{}),
+			strides: (strides[0]+strides[1], 0),
+			data: self.as_mut_ptr(),
+			lifetime: PhantomData,
+		}))
+	}
 }
 impl<'t, T:Element, R:Dim, C:Dim> 
 	Matrix<ViewMut<'t,T,R,C>>
@@ -394,6 +435,13 @@ impl<'t, T:Element, R:Dim, C:Dim>
 			lifetime: PhantomData,
 		}))
 	}
+}
+impl<'t, Src, T:Element, R:Dim, C:Dim>
+	From<&'t mut Matrix<Src>> for Matrix<ViewMut<'t,T,R,C>>
+where
+	Src: ArrayMut<Element=T, R=R, C=C>
+{
+	fn from(src: &'t mut Matrix<Src>) -> Self  {src.view_mut()}
 }
 impl<'t, T:Element>
 	From<&mut [T]> for Matrix<ViewMut<'t, T, Dyn, Stat<1>>>

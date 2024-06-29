@@ -11,16 +11,20 @@ use core::{
     fmt, cmp::max,
     };
 
-    
+
+/// addition like [Add] but specifying output object
 pub trait AddTo<T,O> {
     fn add_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
 }
+/// difference like [Sub] but specifying output object
 pub trait SubTo<T,O> {
     fn sub_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
 }
+/// product like [Mul] but specifying output object
 pub trait MulTo<T,O> {
     fn mul_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
 }
+/// division like [Div] but specifying output object
 pub trait DivTo<T,O> {
     fn div_to<'o>(&self, right: &T, out: &'o mut O) -> &'o mut O;
 }
