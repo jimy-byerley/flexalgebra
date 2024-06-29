@@ -26,6 +26,7 @@ pub mod matrix;
 pub mod operators;
 pub mod matrices;
 pub mod glm;
+pub mod iterator;
 
 pub use prelude::*;
 pub use matrix::*;
