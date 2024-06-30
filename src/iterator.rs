@@ -1,3 +1,7 @@
+/*!
+    Provides the matrix iterators. All column major of course
+*/
+
 use core::ops::Mul;
 use super::matrix::*;
 

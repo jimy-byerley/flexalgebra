@@ -248,22 +248,80 @@ pub enum CastError<E> {
 }
 
 impl<A:Array> Matrix<A> {
-	/// cast this matrix into a different type and dimensionality. the shape however must match
-	pub fn cast<Dst: ArrayOwned>(&self) -> Result<
+	/// apply a function over all elements in the array
+	pub fn map<Dst,F>(&self, mut f: F) -> Matrix<Dst> 
+	where 
+		F: FnMut(&A::Element) -> Dst::Element,
+		Dst: ArrayOwned<R=A::R, C=A::C>,
+	{
+		let mut dst = Matrix::new(self.shape());
+		self.map_to(f, &mut dst);
+		dst
+	}
+	/// apply a function over all elements and store the result in the given output, avoiding any dynamic allocation
+	pub fn map_to<'o,Dst,F>(&self, mut f: F, dst: &'o mut Matrix<Dst>) -> &'o mut Matrix<Dst>
+	where 
+		F: FnMut(&A::Element) -> Dst::Element,
+		Dst: ArrayMut<R=A::R, C=A::C>,
+	{
+		assert_eq!(self.shape(), dst.shape());
+		dst.set_field(|index|  f(&self[index]))
+	}
+	
+	/// cast this matrix into a different type and dimensionality
+	pub fn cast<Dst>(&self) -> Result<
 		Matrix<Dst>, 
 		CastError<<A::Element as TryInto<Dst::Element>>::Error>,
 		> 
-	where A::Element: TryInto<Dst::Element>
+	where 
+		A::Element: TryInto<Dst::Element>,
+		Dst: ArrayOwned,
+	{
+		self.try_map(|x: &A::Element|  x.clone().try_into())
+	}
+	/// cast this matrix into a different type and dimensionality. the shape however must be greater or equal
+	pub fn cast_to<'o,Dst>(&self, dst: &'o mut Matrix<Dst>) -> Result<
+		&'o mut Matrix<Dst>, 
+		CastError<<A::Element as TryInto<Dst::Element>>::Error>,
+		> 
+	where 
+		A::Element: TryInto<Dst::Element>,
+		Dst: ArrayMut,
+	{
+		self.try_map_to(|x: &A::Element|  x.clone().try_into(), dst)
+	}
+	
+	/// apply a function over all elements in the array
+	pub fn try_map<Dst,E,F>(&self, mut f: F) -> Result<Matrix<Dst>, CastError<E>>
+	where 
+		F: FnMut(&A::Element) -> Result<Dst::Element, E>,
+		Dst: ArrayOwned,
 	{
 		let shape = self.shape();
 		let mut dst = Matrix(Dst::empty((
 			Dst::R::check(shape[0]).ok_or(CastError::RowsMismatch)?,
 			Dst::C::check(shape[1]).ok_or(CastError::ColumnsMismatch)?,
 			)));
-		for j in 0 .. dst.rows() {
-			for i in 0 .. dst.rows() {
+		for j in 0 .. shape[1] {
+			for i in 0 .. shape[0] {
 				let index = [i,j];
-				dst[index] = self[index].clone().try_into().map_err(|e| CastError::Element(e))?;
+				dst[index] = f(&self[index]).map_err(|e| CastError::Element(e))?;
+			}
+		}
+		Ok(dst)
+	}
+	/// apply a function over all elements in the array, the shape however must be greater or equal
+	pub fn try_map_to<'o,Dst,E,F>(&self, mut f: F, dst: &'o mut Matrix<Dst>) -> Result<&'o mut Matrix<Dst>, CastError<E>>
+	where 
+		F: FnMut(&A::Element) -> Result<Dst::Element, E>,
+		Dst: ArrayMut,
+	{
+		if self.rows() > dst.rows()  {return Err(CastError::RowsMismatch)}
+		if self.columns() > dst.columns()  {return Err(CastError::RowsMismatch)}
+		for j in 0 .. self.columns() {
+			for i in 0 .. self.rows() {
+				let index = [i,j];
+				dst[index] = f(&self[index]).map_err(|e| CastError::Element(e))?;
 			}
 		}
 		Ok(dst)
