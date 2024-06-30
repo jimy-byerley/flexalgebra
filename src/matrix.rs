@@ -171,8 +171,8 @@ impl<A:ArrayMut> Matrix<A> {
 	where I: IntoIterator<Item=A::Element>
 	{
 		let mut it = it.into_iter();
-		for i in 0 .. self.rows() {
-			for j in 0 .. self.columns() {
+		for j in 0 .. self.columns() {
+			for i in 0 .. self.rows() {
 				if let Some(v) = it.next()  {self[[i,j]] = v}
 				else {return self}
 			}
@@ -183,8 +183,8 @@ impl<A:ArrayMut> Matrix<A> {
 	pub fn set_field<F>(&mut self, mut field: F) -> &mut Self 
 		where F: FnMut([usize; 2]) -> A::Element
 	{
-		for i in 0 .. self.rows() {
-			for j in 0 .. self.columns() {
+		for j in 0 .. self.columns() {
+			for i in 0 .. self.rows() {
 				let index = [i,j];
 				self[index] = field(index);
 			}
@@ -238,29 +238,32 @@ where
 		new
 	}
 }
-pub enum ConversionError<E> {
+pub enum CastError<E> {
+	/// cast failed because matrices do not share the same number of columns
 	ColumnsMismatch,
+	/// cast failed because matrices do not share the same number of rows
 	RowsMismatch,
+	/// cast failed because one of the elements could not be converted
 	Element(E),
 }
 
 impl<A:Array> Matrix<A> {
-	/// cast this matrix into a different type and dimensionality
+	/// cast this matrix into a different type and dimensionality. the shape however must match
 	pub fn cast<Dst: ArrayOwned>(&self) -> Result<
 		Matrix<Dst>, 
-		ConversionError<<A::Element as TryInto<Dst::Element>>::Error>,
+		CastError<<A::Element as TryInto<Dst::Element>>::Error>,
 		> 
 	where A::Element: TryInto<Dst::Element>
 	{
 		let shape = self.shape();
 		let mut dst = Matrix(Dst::empty((
-			Dst::R::check(shape[0]).ok_or(ConversionError::RowsMismatch)?,
-			Dst::C::check(shape[1]).ok_or(ConversionError::ColumnsMismatch)?,
+			Dst::R::check(shape[0]).ok_or(CastError::RowsMismatch)?,
+			Dst::C::check(shape[1]).ok_or(CastError::ColumnsMismatch)?,
 			)));
-		for i in 0 .. dst.rows() {
-			for j in 0 .. dst.rows() {
+		for j in 0 .. dst.rows() {
+			for i in 0 .. dst.rows() {
 				let index = [i,j];
-				dst[index] = self[index].clone().try_into().map_err(|e| ConversionError::Element(e))?;
+				dst[index] = self[index].clone().try_into().map_err(|e| CastError::Element(e))?;
 			}
 		}
 		Ok(dst)
